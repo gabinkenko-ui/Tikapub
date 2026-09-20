@@ -74,11 +74,16 @@ tikapub generate voiceover --topic "3 faits surprenants sur l'espace" --output o
 ```
 
 La voix off utilise [gTTS](https://github.com/pndurette/gTTS) par défaut (nécessite
-un accès réseau sortant vers `translate.google.com`). Les sous-titres sont
-synchronisés automatiquement au prorata de la durée de l'audio généré. Comme pour
-le générateur « citation », le fond et la musique sont générés automatiquement en
-l'absence de `--background-image`/`--background-video`/`--music` (`--no-default-music`
-pour désactiver la musique générée).
+un accès réseau sortant vers `translate.google.com`). Les sous-titres sont alignés
+sur l'audio réellement généré via [faster-whisper](https://github.com/SYSTRAN/faster-whisper)
+(mot par mot) si le package optionnel est installé (`pip install -e ".[align]"`) ;
+sinon, ou si l'alignement échoue pour une raison quelconque (pas de réseau pour
+télécharger le modèle, etc.), Tikapub retombe automatiquement sur une estimation
+proportionnelle au nombre de caractères. Utilise `--no-whisper-align` pour forcer
+cette estimation, ou `--whisper-model` (`tiny`, `base`, `small`, ...) pour choisir la
+taille du modèle. Comme pour le générateur « citation », le fond et la musique sont
+générés automatiquement en l'absence de `--background-image`/`--background-video`/
+`--music` (`--no-default-music` pour désactiver la musique générée).
 
 ### Générer une vidéo « compilation »
 
@@ -163,7 +168,8 @@ composition, export ffmpeg).
 
 - La génération de script IA (`--topic`) nécessite `OPENAI_API_KEY` et le package
   optionnel `openai` (`pip install -e ".[ai-script]"`).
-- Le timing des sous-titres du générateur voix off est une approximation
-  proportionnelle au nombre de caractères, pas un alignement forcé (type Whisper).
+- L'alignement précis des sous-titres (`--whisper-model`) nécessite le package
+  optionnel `faster-whisper` (`pip install -e ".[align]"`) ; sans lui, le timing
+  retombe sur une approximation proportionnelle au nombre de caractères.
 - Le client TikTok cible le flux `FILE_UPLOAD` de la Content Posting API ; vérifie
   la documentation officielle avant mise en production, l'API évolue régulièrement.

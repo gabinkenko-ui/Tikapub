@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tempfile
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -51,6 +52,86 @@ def _subtitle_chunks_with_timing(
     return timings
 
 
+def _transcribe_word_timings(
+    audio_path: Path, language: str, model_size: str
+) -> list[tuple[str, float, float]]:
+    """Transcrit l'audio avec horodatage par mot via faster-whisper (import différé)."""
+    from faster_whisper import WhisperModel
+
+    model = WhisperModel(model_size, device="cpu", compute_type="int8")
+    segments, _ = model.transcribe(str(audio_path), word_timestamps=True, language=language)
+
+    words: list[tuple[str, float, float]] = []
+    for segment in segments:
+        for word in segment.words or []:
+            text = word.word.strip()
+            if text:
+                words.append((text, word.start, word.end))
+    return words
+
+
+def _align_script_words(
+    script: str, word_timings: list[tuple[str, float, float]]
+) -> list[tuple[str, float, float]] | None:
+    """Associe chaque mot du script original à un horodatage issu de la transcription.
+
+    Le texte affiché reste celui du script (ponctuation/casse d'origine) ; seuls les
+    horodatages proviennent de la transcription Whisper. Si la transcription est vide ou
+    que son nombre de mots diverge trop du script (échec probable), retourne `None` : le
+    generateur doit alors revenir à l'estimation proportionnelle.
+    """
+    script_words = script.split()
+    if not script_words or not word_timings:
+        return None
+
+    n_script = len(script_words)
+    n_whisper = len(word_timings)
+    if abs(n_script - n_whisper) / n_script > 0.5:
+        return None
+
+    aligned: list[tuple[str, float, float]] = []
+    for i, word in enumerate(script_words):
+        j = round(i * (n_whisper - 1) / (n_script - 1)) if n_script > 1 else 0
+        _, start, end = word_timings[j]
+        aligned.append((word, start, end))
+    return aligned
+
+
+def _group_aligned_words(
+    aligned_words: list[tuple[str, float, float]], chunk_size: int
+) -> list[tuple[str, float, float]]:
+    """Regroupe des mots déjà horodatés en paquets de `chunk_size` (un timing par paquet)."""
+    timings: list[tuple[str, float, float]] = []
+    for chunk in split_into_chunks(aligned_words, chunk_size):
+        text = " ".join(word for word, _, _ in chunk)
+        timings.append((text, chunk[0][1], chunk[-1][2]))
+    return timings
+
+
+def _resolve_subtitle_timings(
+    script: str,
+    voice_path: Path,
+    duration: float,
+    chunk_size: int,
+    align_subtitles: bool,
+    whisper_model: str,
+    tts_lang: str,
+) -> list[tuple[str, float, float]]:
+    """Calcule le timing des sous-titres : alignement Whisper si possible, sinon estimation."""
+    if align_subtitles:
+        try:
+            word_timings = _transcribe_word_timings(voice_path, tts_lang, whisper_model)
+            aligned = _align_script_words(script, word_timings)
+            if aligned:
+                return _group_aligned_words(aligned, chunk_size)
+        except Exception as exc:  # noqa: BLE001 - dépendance optionnelle, on retombe sur l'estimation
+            warnings.warn(
+                f"Alignement Whisper indisponible ({exc}), retour au timing proportionnel.",
+                stacklevel=2,
+            )
+    return _subtitle_chunks_with_timing(script, duration, chunk_size)
+
+
 def _render_subtitle_rgba(text: str, fonts_dir: Path, font_name: str | None) -> "Image.Image":
     band_height = 320
     image = Image.new("RGBA", (VIDEO_WIDTH, band_height), (0, 0, 0, 0))
@@ -92,6 +173,8 @@ class VoiceoverVideoConfig:
     fonts_dir: Path = field(default_factory=lambda: Path("assets/fonts"))
     font_name: str | None = None
     subtitle_chunk_size: int = 4
+    align_subtitles: bool = True
+    whisper_model: str = "base"
 
 
 class VoiceoverVideoGenerator(VideoGenerator):
@@ -152,10 +235,18 @@ class VoiceoverVideoGenerator(VideoGenerator):
 
                 background = make_default_background_clip(duration, seed=cfg.seed)
 
+            subtitle_timings = _resolve_subtitle_timings(
+                script,
+                voice_path,
+                duration,
+                cfg.subtitle_chunk_size,
+                cfg.align_subtitles,
+                cfg.whisper_model,
+                cfg.tts_lang,
+            )
+
             subtitle_clips = []
-            for text, start, end in _subtitle_chunks_with_timing(
-                script, duration, cfg.subtitle_chunk_size
-            ):
+            for text, start, end in subtitle_timings:
                 rgba = _render_subtitle_rgba(text, cfg.fonts_dir, cfg.font_name)
                 clip = (
                     ImageClip(pil_to_array(rgba), transparent=True)
