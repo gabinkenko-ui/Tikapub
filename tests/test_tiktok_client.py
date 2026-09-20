@@ -2,6 +2,7 @@ import math
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
 from tikapub.publish.tiktok_client import (
     MAX_CHUNK_SIZE,
@@ -76,13 +77,24 @@ def test_exchange_code_for_token_stores_tokens():
         "refresh_token": "RT",
         "error": {"code": "ok"},
     }
-    with patch("tikapub.publish.tiktok_client.requests.post", return_value=fake_response) as mock_post:
+    with patch("tikapub.publish.tiktok_client.requests.request", return_value=fake_response) as mock_request:
         data = client.exchange_code_for_token("some-code")
 
     assert data["access_token"] == "AT"
     assert client.access_token == "AT"
     assert client.refresh_token == "RT"
-    mock_post.assert_called_once()
+    mock_request.assert_called_once()
+
+
+def test_request_wraps_network_errors_as_tiktok_api_error():
+    from tikapub.publish.tiktok_client import _request
+
+    with patch(
+        "tikapub.publish.tiktok_client.requests.request",
+        side_effect=requests.exceptions.ProxyError("boom"),
+    ):
+        with pytest.raises(TikTokAPIError, match="Impossible de contacter l'API TikTok"):
+            _request("POST", "https://open.tiktokapis.com/v2/oauth/token/")
 
 
 def test_publish_video_requires_access_token():
