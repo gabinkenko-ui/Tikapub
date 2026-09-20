@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="tikapub_secure_prefs.xml" />
+        <exclude domain="file" path="datastore/tikapub_settings.preferences_pb" />
+        <exclude domain="database" path="tikapub.db" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="tikapub_secure_prefs.xml" />
+    </device-transfer>
+</data-extraction-rules>

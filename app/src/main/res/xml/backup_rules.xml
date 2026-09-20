@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Never back up encrypted TikTok tokens/secrets or the settings DataStore. -->
+    <exclude domain="sharedpref" path="tikapub_secure_prefs.xml" />
+    <exclude domain="file" path="datastore/tikapub_settings.preferences_pb" />
+    <exclude domain="database" path="tikapub.db" />
+</full-backup-content>

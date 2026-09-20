@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tikapub - Connexion TikTok</title>
+  <meta name="robots" content="noindex" />
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f0f14;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      text-align: center;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+    .card { max-width: 420px; }
+    a.button {
+      display: inline-block;
+      margin-top: 16px;
+      padding: 12px 24px;
+      background: #7c4dff;
+      color: #fff;
+      text-decoration: none;
+      border-radius: 8px;
+      font-weight: 600;
+    }
+    p { opacity: 0.8; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Tikapub</h2>
+    <p id="message">Redirection vers l'application...</p>
+    <a id="fallback" class="button" href="#" style="display:none;">Ouvrir Tikapub</a>
+  </div>
+
+  <script>
+    // This page exists only because TikTok's OAuth requires an HTTPS redirect_uri (it will not
+    // accept a bare custom scheme like tikapub://...). It immediately forwards whatever TikTok
+    // sent back (code, state, or an error) to the Android app's own deep link, then this page can
+    // be closed - no data is stored or sent anywhere else.
+    const params = window.location.search; // includes the leading "?"
+    const deepLink = "tikapub://oauth-callback" + params;
+
+    const fallback = document.getElementById("fallback");
+    fallback.href = deepLink;
+    fallback.style.display = "inline-block";
+
+    window.location.replace(deepLink);
+
+    setTimeout(function () {
+      document.getElementById("message").textContent =
+        "Si rien ne se passe, appuie sur le bouton ci-dessous.";
+    }, 1500);
+  </script>
+</body>
+</html>
