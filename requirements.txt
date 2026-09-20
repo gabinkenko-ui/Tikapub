@@ -1,0 +1,9 @@
+click>=8.1
+python-dotenv>=1.0
+requests>=2.31
+pillow>=10.0
+moviepy>=1.0.3,<2
+gTTS>=2.5
+imageio-ffmpeg>=0.4.9
+# extra facultatif pour la génération de script par IA :
+# openai>=1.30
