@@ -87,6 +87,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
                         : () => _runBusy(() async {
                               await _saveShare.saveToGallery(widget.videoPath);
                               if (mounted) {
+                                // ignore: use_build_context_synchronously
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(content: Text('Vidéo enregistrée dans la galerie.')),
                                 );
