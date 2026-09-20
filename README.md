@@ -2,7 +2,16 @@
 
 Création et publication automatique de vidéos de différentes natures sur TikTok.
 
-## Fonctionnalités
+Ce dépôt contient deux projets :
+
+- **`/` (ce dossier)** : outil en ligne de commande Python (voir plus bas) —
+  génère des vidéos et peut les publier directement sur TikTok via son API
+  officielle.
+- **[`mobile/`](mobile/README.md)** : application Android (Flutter) qui génère
+  des vidéos directement sur le téléphone, sans publication automatique —
+  c'est toi qui enregistres/partages la vidéo ensuite sur TikTok ou YouTube.
+
+## Fonctionnalités (CLI Python)
 
 - **Citations / texte animé** : texte + auteur sur fond image, vidéo ou généré par défaut.
 - **Résumé / voix off IA** : script (fourni ou généré via OpenAI), voix off TTS,
