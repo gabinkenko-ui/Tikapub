@@ -6,8 +6,9 @@ plugins {
 
 android {
     namespace = "com.tikapub.tikapub_mobile"
-    // ffmpeg-kit-full-gpl (via ffmpeg_kit_flutter_new) requires compileSdk 35 / minSdk 24.
-    compileSdk = 35
+    // ffmpeg-kit-full-gpl (via ffmpeg_kit_flutter_new) requires minSdk 24. compileSdk 36 is
+    // the highest actually required, by file_picker/flutter_tts/gal/share_plus/video_player.
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -18,7 +19,7 @@ android {
     defaultConfig {
         applicationId = "com.tikapub.tikapub_mobile"
         minSdk = 24
-        targetSdk = 35
+        targetSdk = 36
         // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
         // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
         // You can force using the value of versionCode by specifying the `-P force-version-code-ignoring-abi=true`
