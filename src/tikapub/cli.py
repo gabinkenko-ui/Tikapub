@@ -164,7 +164,7 @@ def auth_url() -> None:
 @click.argument("code")
 def auth_exchange(code: str) -> None:
     """Échange le code d'autorisation reçu contre un access_token / refresh_token."""
-    from tikapub.publish.tiktok_client import TikTokClient
+    from tikapub.publish.tiktok_client import TikTokAPIError, TikTokClient
 
     settings = load_settings()
     if not settings.tiktok_client_key or not settings.tiktok_client_secret:
@@ -175,7 +175,10 @@ def auth_exchange(code: str) -> None:
         client_secret=settings.tiktok_client_secret,
         redirect_uri=settings.tiktok_redirect_uri,
     )
-    data = client.exchange_code_for_token(code)
+    try:
+        data = client.exchange_code_for_token(code)
+    except TikTokAPIError as exc:
+        raise click.ClickException(str(exc)) from exc
     click.echo("Ajoute ces valeurs à ton fichier .env :")
     click.echo(f"TIKTOK_ACCESS_TOKEN={data.get('access_token')}")
     click.echo(f"TIKTOK_REFRESH_TOKEN={data.get('refresh_token')}")
@@ -194,7 +197,7 @@ def auth_exchange(code: str) -> None:
 )
 def publish(video_file: str, title: str, privacy_level: str) -> None:
     """Publie une vidéo déjà générée sur TikTok via la Content Posting API."""
-    from tikapub.publish.tiktok_client import TikTokClient
+    from tikapub.publish.tiktok_client import TikTokAPIError, TikTokClient
 
     settings = load_settings()
     missing = [
@@ -218,7 +221,10 @@ def publish(video_file: str, title: str, privacy_level: str) -> None:
         refresh_token=settings.tiktok_refresh_token,
         redirect_uri=settings.tiktok_redirect_uri,
     )
-    result = client.publish_video(Path(video_file), title=title, privacy_level=privacy_level)
+    try:
+        result = client.publish_video(Path(video_file), title=title, privacy_level=privacy_level)
+    except TikTokAPIError as exc:
+        raise click.ClickException(str(exc)) from exc
     click.echo(f"Statut final : {result}")
 
 

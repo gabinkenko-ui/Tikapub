@@ -36,6 +36,16 @@ class TikTokAPIError(RuntimeError):
     """Levée quand l'API TikTok renvoie une erreur ou un statut inattendu."""
 
 
+def _request(method: str, url: str, **kwargs) -> requests.Response:
+    """Enveloppe requests.request : transforme les erreurs réseau en TikTokAPIError lisible."""
+    try:
+        return requests.request(method, url, **kwargs)
+    except requests.exceptions.RequestException as exc:
+        raise TikTokAPIError(
+            f"Impossible de contacter l'API TikTok ({url}) : {exc}"
+        ) from exc
+
+
 @dataclass
 class UploadPlan:
     video_size: int
@@ -90,7 +100,8 @@ class TikTokClient:
         return f"{AUTH_BASE_URL}?{urlencode(params)}"
 
     def exchange_code_for_token(self, code: str) -> dict:
-        response = requests.post(
+        response = _request(
+            "POST",
             TOKEN_URL,
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             data={
@@ -110,7 +121,8 @@ class TikTokClient:
     def refresh_access_token(self) -> dict:
         if not self.refresh_token:
             raise ValueError("Aucun refresh_token disponible.")
-        response = requests.post(
+        response = _request(
+            "POST",
             TOKEN_URL,
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             data={
@@ -137,7 +149,7 @@ class TikTokClient:
     # --- Publication ------------------------------------------------------
 
     def query_creator_info(self) -> dict:
-        response = requests.post(CREATOR_INFO_URL, headers=self._auth_headers(), timeout=30)
+        response = _request("POST", CREATOR_INFO_URL, headers=self._auth_headers(), timeout=30)
         return _raise_for_error(response)
 
     def init_video_upload(
@@ -169,8 +181,8 @@ class TikTokClient:
                 "total_chunk_count": plan.total_chunk_count,
             },
         }
-        response = requests.post(
-            INIT_UPLOAD_URL, headers=self._auth_headers(), json=payload, timeout=30
+        response = _request(
+            "POST", INIT_UPLOAD_URL, headers=self._auth_headers(), json=payload, timeout=30
         )
         data = _raise_for_error(response)
         data["data"]["_plan"] = plan
@@ -187,7 +199,7 @@ class TikTokClient:
                     "Content-Range": f"bytes {offset}-{chunk_end}/{plan.video_size}",
                     "Content-Type": "video/mp4",
                 }
-                response = requests.put(upload_url, headers=headers, data=chunk, timeout=120)
+                response = _request("PUT", upload_url, headers=headers, data=chunk, timeout=120)
                 if response.status_code not in (200, 201, 206):
                     raise TikTokAPIError(
                         f"Échec de l'upload du chunk {offset}-{chunk_end} : "
@@ -196,7 +208,8 @@ class TikTokClient:
                 offset = chunk_end + 1
 
     def get_publish_status(self, publish_id: str) -> dict:
-        response = requests.post(
+        response = _request(
+            "POST",
             STATUS_URL,
             headers=self._auth_headers(),
             json={"publish_id": publish_id},
