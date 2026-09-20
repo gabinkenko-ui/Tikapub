@@ -1,7 +1,8 @@
-"""Générateur de vidéos "citation" : texte animé sur fond (image/vidéo/dégradé)."""
+"""Générateur de vidéos "citation" : texte animé sur fond (image/vidéo/généré par défaut)."""
 
 from __future__ import annotations
 
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -10,23 +11,6 @@ from PIL import Image, ImageDraw
 from tikapub.generators.base import VIDEO_FPS, VIDEO_HEIGHT, VIDEO_WIDTH, VideoGenerator
 from tikapub.utils.image import pil_to_array
 from tikapub.utils.text import load_font, wrap_text
-
-_GRADIENT_TOP = (20, 20, 40)
-_GRADIENT_BOTTOM = (70, 30, 90)
-
-
-def _gradient_background(size: tuple[int, int]) -> Image.Image:
-    width, height = size
-    image = Image.new("RGB", size, _GRADIENT_TOP)
-    draw = ImageDraw.Draw(image)
-    for y in range(height):
-        ratio = y / max(height - 1, 1)
-        color = tuple(
-            int(top + (bottom - top) * ratio)
-            for top, bottom in zip(_GRADIENT_TOP, _GRADIENT_BOTTOM)
-        )
-        draw.line([(0, y), (width, y)], fill=color)
-    return image
 
 
 def _cover_resize(image: Image.Image, size: tuple[int, int]) -> Image.Image:
@@ -56,32 +40,26 @@ class QuoteVideoConfig:
     background_image: Path | None = None
     background_video: Path | None = None
     music: Path | None = None
+    generate_default_music: bool = True
+    seed: int | None = None
     fonts_dir: Path = field(default_factory=lambda: Path("assets/fonts"))
     font_name: str | None = None
     text_color: tuple[int, int, int] = (255, 255, 255)
-    overlay_opacity: int = 110  # 0-255, assombrit le fond pour la lisibilité du texte
+    overlay_opacity: int = 90  # 0-255, assombrit le fond pour la lisibilité du texte
 
 
 class QuoteVideoGenerator(VideoGenerator):
-    """Rend une citation (texte + auteur optionnel) sur un fond fixe ou vidéo."""
+    """Rend une citation (texte + auteur optionnel) sur un fond image/vidéo/généré par défaut."""
 
     def __init__(self, config: QuoteVideoConfig):
         self.config = config
 
-    def _build_frame(self) -> Image.Image:
-        size = (VIDEO_WIDTH, VIDEO_HEIGHT)
+    def _build_text_overlay(self) -> Image.Image:
+        """Calque RGBA transparent contenant uniquement le texte (contour noir pour la lisibilité)."""
         cfg = self.config
-
-        if cfg.background_image and cfg.background_image.exists():
-            base = _cover_resize(Image.open(cfg.background_image).convert("RGB"), size)
-        else:
-            base = _gradient_background(size)
-
-        if cfg.overlay_opacity:
-            overlay = Image.new("RGBA", size, (0, 0, 0, cfg.overlay_opacity))
-            base = Image.alpha_composite(base.convert("RGBA"), overlay).convert("RGB")
-
-        draw = ImageDraw.Draw(base)
+        size = (VIDEO_WIDTH, VIDEO_HEIGHT)
+        overlay = Image.new("RGBA", size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
         max_text_width = int(VIDEO_WIDTH * 0.82)
 
         font_size = 76
@@ -102,12 +80,17 @@ class QuoteVideoGenerator(VideoGenerator):
         block_height = line_height * len(lines)
         start_y = (VIDEO_HEIGHT - block_height) // 2
 
+        def _draw_outlined(x: int, y: int, text: str, font) -> None:
+            for dx, dy in ((-2, 0), (2, 0), (0, -2), (0, 2)):
+                draw.text((x + dx, y + dy), text, font=font, fill=(0, 0, 0, 255))
+            draw.text((x, y), text, font=font, fill=(*cfg.text_color, 255))
+
         for i, line in enumerate(lines):
             bbox = font.getbbox(line)
             line_width = bbox[2] - bbox[0]
             x = (VIDEO_WIDTH - line_width) // 2
             y = start_y + i * line_height
-            draw.text((x, y), line, font=font, fill=cfg.text_color)
+            _draw_outlined(x, y, line, font)
 
         if cfg.author:
             author_font = load_font(cfg.fonts_dir, cfg.font_name, 44)
@@ -116,44 +99,75 @@ class QuoteVideoGenerator(VideoGenerator):
             author_width = bbox[2] - bbox[0]
             x = (VIDEO_WIDTH - author_width) // 2
             y = start_y + block_height + 40
-            draw.text((x, y), author_text, font=author_font, fill=cfg.text_color)
+            _draw_outlined(x, y, author_text, author_font)
 
-        return base
+        return overlay
+
+    def _build_background_clip(self, duration: float):
+        from moviepy.editor import ImageClip, VideoFileClip
+
+        cfg = self.config
+        if cfg.background_video and cfg.background_video.exists():
+            bg_clip = VideoFileClip(str(cfg.background_video)).without_audio()
+            bg_clip = (
+                bg_clip.loop(duration=duration)
+                if bg_clip.duration < duration
+                else bg_clip.subclip(0, duration)
+            )
+            return bg_clip.resize(height=VIDEO_HEIGHT).crop(
+                x_center=bg_clip.w / 2, width=VIDEO_WIDTH, height=VIDEO_HEIGHT
+            )
+
+        if cfg.background_image and cfg.background_image.exists():
+            still = _cover_resize(
+                Image.open(cfg.background_image).convert("RGB"), (VIDEO_WIDTH, VIDEO_HEIGHT)
+            )
+            return ImageClip(pil_to_array(still)).set_duration(duration)
+
+        from tikapub.generators.defaults import make_default_background_clip
+
+        return make_default_background_clip(duration, seed=cfg.seed)
 
     def generate(self, output_path: Path) -> Path:
-        from moviepy.editor import (  # import différé : ffmpeg n'est requis qu'ici
-            AudioFileClip,
-            CompositeVideoClip,
-            ImageClip,
-            VideoFileClip,
-            afx,
-        )
+        from moviepy.editor import AudioFileClip, ColorClip, CompositeVideoClip, ImageClip, afx
 
         cfg = self.config
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        if cfg.background_video and cfg.background_video.exists():
-            bg_clip = VideoFileClip(str(cfg.background_video)).without_audio()
-            bg_clip = bg_clip.loop(duration=cfg.duration) if bg_clip.duration < cfg.duration else bg_clip.subclip(0, cfg.duration)
-            bg_clip = bg_clip.resize(height=VIDEO_HEIGHT).crop(
-                x_center=bg_clip.w / 2, width=VIDEO_WIDTH, height=VIDEO_HEIGHT
+        layers = [self._build_background_clip(cfg.duration)]
+
+        if cfg.overlay_opacity:
+            dark_overlay = (
+                ColorClip(size=(VIDEO_WIDTH, VIDEO_HEIGHT), color=(0, 0, 0))
+                .set_opacity(cfg.overlay_opacity / 255)
+                .set_duration(cfg.duration)
             )
-            frame = self._build_frame()
-            text_layer = ImageClip(pil_to_array(frame)).set_duration(cfg.duration)
-            video = CompositeVideoClip([bg_clip, text_layer], size=(VIDEO_WIDTH, VIDEO_HEIGHT))
-        else:
-            frame = self._build_frame()
-            video = ImageClip(pil_to_array(frame)).set_duration(cfg.duration)
+            layers.append(dark_overlay)
 
-        if cfg.music and cfg.music.exists():
-            audio = AudioFileClip(str(cfg.music))
-            if audio.duration < cfg.duration:
-                audio = audio.fx(afx.audio_loop, duration=cfg.duration)
-            else:
-                audio = audio.subclip(0, cfg.duration)
-            video = video.set_audio(audio.audio_fadeout(1.0))
+        text_overlay = self._build_text_overlay()
+        layers.append(ImageClip(pil_to_array(text_overlay), transparent=True).set_duration(cfg.duration))
 
-        video.write_videofile(
-            str(output_path), fps=VIDEO_FPS, codec="libx264", audio_codec="aac"
-        )
+        video = CompositeVideoClip(layers, size=(VIDEO_WIDTH, VIDEO_HEIGHT)).set_duration(cfg.duration)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            if cfg.music and cfg.music.exists():
+                audio = AudioFileClip(str(cfg.music))
+                audio = (
+                    audio.fx(afx.audio_loop, duration=cfg.duration)
+                    if audio.duration < cfg.duration
+                    else audio.subclip(0, cfg.duration)
+                )
+                video = video.set_audio(audio.audio_fadeout(1.0))
+            elif cfg.generate_default_music:
+                from tikapub.generators.defaults import generate_default_ambient_music
+
+                music_path = Path(tmp_dir) / "default_music.wav"
+                generate_default_ambient_music(music_path, duration=cfg.duration, seed=cfg.seed)
+                audio = AudioFileClip(str(music_path))
+                video = video.set_audio(audio.audio_fadeout(1.0))
+
+            video.write_videofile(
+                str(output_path), fps=VIDEO_FPS, codec="libx264", audio_codec="aac"
+            )
+
         return output_path

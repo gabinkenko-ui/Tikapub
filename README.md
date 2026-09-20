@@ -4,11 +4,14 @@ Création et publication automatique de vidéos de différentes natures sur TikT
 
 ## Fonctionnalités
 
-- **Citations / texte animé** : texte + auteur sur fond image, vidéo ou dégradé.
+- **Citations / texte animé** : texte + auteur sur fond image, vidéo ou généré par défaut.
 - **Résumé / voix off IA** : script (fourni ou généré via OpenAI), voix off TTS,
   sous-titres synchronisés automatiquement.
 - **Compilation / repost** : assemble des clips d'un dossier en une vidéo verticale
   sous la limite de durée, avec titre d'intro optionnel.
+- **Fonds et musique générés par défaut** : si tu ne fournis ni image/vidéo de fond
+  ni musique, Tikapub en génère automatiquement (dégradé animé + nappe d'ambiance
+  synthétisée), 100% local, sans réseau ni assets à télécharger.
 - **Publication TikTok** : intégration de la Content Posting API officielle
   (OAuth2 + upload par chunks + suivi de statut).
 
@@ -46,7 +49,10 @@ tikapub generate quote \
   --output output/citation.mp4
 ```
 
-Sans image/vidéo de fond, un dégradé par défaut est utilisé.
+Sans image/vidéo de fond, un dégradé animé généré procéduralement est utilisé ; sans
+`--music`, une nappe d'ambiance est synthétisée automatiquement (désactivable avec
+`--no-default-music`). Utilise `--seed` pour reproduire le même fond/musique généré
+d'une exécution à l'autre.
 
 ### Générer une vidéo « voix off IA »
 
@@ -60,7 +66,10 @@ tikapub generate voiceover --topic "3 faits surprenants sur l'espace" --output o
 
 La voix off utilise [gTTS](https://github.com/pndurette/gTTS) par défaut (nécessite
 un accès réseau sortant vers `translate.google.com`). Les sous-titres sont
-synchronisés automatiquement au prorata de la durée de l'audio généré.
+synchronisés automatiquement au prorata de la durée de l'audio généré. Comme pour
+le générateur « citation », le fond et la musique sont générés automatiquement en
+l'absence de `--background-image`/`--background-video`/`--music` (`--no-default-music`
+pour désactiver la musique générée).
 
 ### Générer une vidéo « compilation »
 
@@ -73,7 +82,9 @@ tikapub generate compilation \
 ```
 
 Place tes clips sources (`.mp4`, `.mov`, `.m4v`, `.webm`, `.avi`) dans
-`clips_source/` avant de lancer la commande.
+`clips_source/` avant de lancer la commande. Sans `--music`, une musique
+d'ambiance générée est mixée sous l'audio original des clips (désactivable avec
+`--no-default-music`).
 
 ### Publier sur TikTok
 
@@ -111,7 +122,8 @@ src/tikapub/
   cli.py               # commandes `tikapub generate ...` / `tikapub auth ...` / `tikapub publish`
   generators/
     base.py            # interface commune (VideoGenerator), format vidéo, correctif Pillow/moviepy
-    quote.py            # texte + auteur sur fond image/vidéo/dégradé
+    defaults.py          # fond animé + musique d'ambiance générés procéduralement (sans réseau)
+    quote.py            # texte + auteur sur fond image/vidéo/généré par défaut
     voiceover.py         # script -> TTS -> sous-titres synchronisés
     compilation.py       # concaténation de clips + intro optionnelle
   publish/

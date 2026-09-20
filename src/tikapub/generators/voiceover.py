@@ -9,7 +9,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 from tikapub.generators.base import VIDEO_FPS, VIDEO_HEIGHT, VIDEO_WIDTH, VideoGenerator
-from tikapub.generators.quote import _cover_resize, _gradient_background
+from tikapub.generators.quote import _cover_resize
 from tikapub.utils.image import pil_to_array
 from tikapub.utils.text import load_font, split_into_chunks, wrap_text
 
@@ -87,6 +87,8 @@ class VoiceoverVideoConfig:
     background_video: Path | None = None
     music: Path | None = None
     music_volume: float = 0.15
+    generate_default_music: bool = True
+    seed: int | None = None
     fonts_dir: Path = field(default_factory=lambda: Path("assets/fonts"))
     font_name: str | None = None
     subtitle_chunk_size: int = 4
@@ -139,15 +141,16 @@ class VoiceoverVideoGenerator(VideoGenerator):
                 background = bg_clip.resize(height=VIDEO_HEIGHT).crop(
                     x_center=bg_clip.w / 2, width=VIDEO_WIDTH, height=VIDEO_HEIGHT
                 )
-            else:
-                if cfg.background_image and cfg.background_image.exists():
-                    still = _cover_resize(
-                        Image.open(cfg.background_image).convert("RGB"),
-                        (VIDEO_WIDTH, VIDEO_HEIGHT),
-                    )
-                else:
-                    still = _gradient_background((VIDEO_WIDTH, VIDEO_HEIGHT))
+            elif cfg.background_image and cfg.background_image.exists():
+                still = _cover_resize(
+                    Image.open(cfg.background_image).convert("RGB"),
+                    (VIDEO_WIDTH, VIDEO_HEIGHT),
+                )
                 background = ImageClip(pil_to_array(still)).set_duration(duration)
+            else:
+                from tikapub.generators.defaults import make_default_background_clip
+
+                background = make_default_background_clip(duration, seed=cfg.seed)
 
             subtitle_clips = []
             for text, start, end in _subtitle_chunks_with_timing(
@@ -175,6 +178,12 @@ class VoiceoverVideoGenerator(VideoGenerator):
                     else music_clip.subclip(0, duration)
                 )
                 audio_tracks.append(music_clip)
+            elif cfg.generate_default_music:
+                from tikapub.generators.defaults import generate_default_ambient_music
+
+                default_music_path = Path(tmp_dir) / "default_music.wav"
+                generate_default_ambient_music(default_music_path, duration=duration, seed=cfg.seed)
+                audio_tracks.append(AudioFileClip(str(default_music_path)).volumex(cfg.music_volume))
 
             video = video.set_audio(CompositeAudioClip(audio_tracks))
             video.write_videofile(

@@ -29,10 +29,19 @@ def generate() -> None:
 @click.option("--background-image", default=None, type=click.Path(exists=True))
 @click.option("--background-video", default=None, type=click.Path(exists=True))
 @click.option("--music", default=None, type=click.Path(exists=True))
+@click.option(
+    "--no-default-music",
+    is_flag=True,
+    default=False,
+    help="Ne pas générer de musique d'ambiance automatiquement si --music n'est pas fourni.",
+)
+@click.option("--seed", default=None, type=int, help="Graine aléatoire (fond et musique générés).")
 @click.option("--duration", default=8.0, type=float, help="Durée en secondes.")
 @click.option("--output", default=None, type=click.Path(), help="Chemin du fichier .mp4 de sortie.")
-def generate_quote(text, author, background_image, background_video, music, duration, output):
-    """Génère une vidéo « citation » : texte animé sur fond image/vidéo/dégradé."""
+def generate_quote(
+    text, author, background_image, background_video, music, no_default_music, seed, duration, output
+):
+    """Génère une vidéo « citation » : texte animé sur fond image/vidéo/généré par défaut."""
     from tikapub.generators.quote import QuoteVideoConfig, QuoteVideoGenerator
 
     settings = load_settings()
@@ -43,6 +52,8 @@ def generate_quote(text, author, background_image, background_video, music, dura
         background_image=_optional_path(background_image),
         background_video=_optional_path(background_video),
         music=_optional_path(music),
+        generate_default_music=not no_default_music,
+        seed=seed,
         fonts_dir=settings.fonts_dir,
     )
     output_path = Path(output) if output else settings.output_dir / "quote.mp4"
@@ -59,8 +70,17 @@ def generate_quote(text, author, background_image, background_video, music, dura
 @click.option("--background-image", default=None, type=click.Path(exists=True))
 @click.option("--background-video", default=None, type=click.Path(exists=True))
 @click.option("--music", default=None, type=click.Path(exists=True))
+@click.option(
+    "--no-default-music",
+    is_flag=True,
+    default=False,
+    help="Ne pas générer de musique d'ambiance automatiquement si --music n'est pas fourni.",
+)
+@click.option("--seed", default=None, type=int, help="Graine aléatoire (fond et musique générés).")
 @click.option("--output", default=None, type=click.Path())
-def generate_voiceover(script, script_file, topic, background_image, background_video, music, output):
+def generate_voiceover(
+    script, script_file, topic, background_image, background_video, music, no_default_music, seed, output
+):
     """Génère une vidéo « résumé / voix off IA » avec sous-titres synchronisés."""
     from tikapub.generators.voiceover import VoiceoverVideoConfig, VoiceoverVideoGenerator
 
@@ -75,6 +95,8 @@ def generate_voiceover(script, script_file, topic, background_image, background_
         background_image=_optional_path(background_image),
         background_video=_optional_path(background_video),
         music=_optional_path(music),
+        generate_default_music=not no_default_music,
+        seed=seed,
         fonts_dir=settings.fonts_dir,
     )
     output_path = Path(output) if output else settings.output_dir / "voiceover.mp4"
@@ -86,11 +108,17 @@ def generate_voiceover(script, script_file, topic, background_image, background_
 @click.option("--source-dir", required=True, type=click.Path(exists=True, file_okay=False))
 @click.option("--max-duration", default=58.0, type=float)
 @click.option("--music", default=None, type=click.Path(exists=True))
+@click.option(
+    "--no-default-music",
+    is_flag=True,
+    default=False,
+    help="Ne pas générer de musique d'ambiance automatiquement si --music n'est pas fourni.",
+)
 @click.option("--intro-text", default=None)
 @click.option("--shuffle", is_flag=True, default=False)
 @click.option("--seed", default=None, type=int)
 @click.option("--output", default=None, type=click.Path())
-def generate_compilation(source_dir, max_duration, music, intro_text, shuffle, seed, output):
+def generate_compilation(source_dir, max_duration, music, no_default_music, intro_text, shuffle, seed, output):
     """Génère une vidéo « compilation / repost » à partir d'un dossier de clips."""
     from tikapub.generators.compilation import CompilationVideoConfig, CompilationVideoGenerator
 
@@ -99,6 +127,7 @@ def generate_compilation(source_dir, max_duration, music, intro_text, shuffle, s
         source_dir=Path(source_dir),
         max_duration=max_duration,
         music=_optional_path(music),
+        generate_default_music=not no_default_music,
         intro_text=intro_text,
         shuffle=shuffle,
         seed=seed,

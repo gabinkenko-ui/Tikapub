@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -17,6 +18,7 @@ class CompilationVideoConfig:
     max_duration: float = 58.0
     music: Path | None = None
     music_volume: float = 0.2
+    generate_default_music: bool = True
     shuffle: bool = False
     seed: int | None = None
     fonts_dir: Path = field(default_factory=lambda: Path("assets/fonts"))
@@ -101,19 +103,28 @@ class CompilationVideoGenerator(VideoGenerator):
                 video.duration
             )
 
-        if cfg.music and cfg.music.exists():
-            music_clip = AudioFileClip(str(cfg.music)).volumex(cfg.music_volume)
-            music_clip = (
-                music_clip.fx(afx.audio_loop, duration=video.duration)
-                if music_clip.duration < video.duration
-                else music_clip.subclip(0, video.duration)
-            )
-            tracks = [music_clip]
-            if video.audio is not None:
-                tracks.insert(0, video.audio)
-            video = video.set_audio(CompositeAudioClip(tracks))
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            music_path = cfg.music if (cfg.music and cfg.music.exists()) else None
+            if music_path is None and cfg.generate_default_music:
+                from tikapub.generators.defaults import generate_default_ambient_music
 
-        video.write_videofile(
-            str(output_path), fps=VIDEO_FPS, codec="libx264", audio_codec="aac"
-        )
+                music_path = Path(tmp_dir) / "default_music.wav"
+                generate_default_ambient_music(music_path, duration=video.duration, seed=cfg.seed)
+
+            if music_path is not None:
+                music_clip = AudioFileClip(str(music_path)).volumex(cfg.music_volume)
+                music_clip = (
+                    music_clip.fx(afx.audio_loop, duration=video.duration)
+                    if music_clip.duration < video.duration
+                    else music_clip.subclip(0, video.duration)
+                )
+                tracks = [music_clip]
+                if video.audio is not None:
+                    tracks.insert(0, video.audio)
+                video = video.set_audio(CompositeAudioClip(tracks))
+
+            video.write_videofile(
+                str(output_path), fps=VIDEO_FPS, codec="libx264", audio_codec="aac"
+            )
+
         return output_path
