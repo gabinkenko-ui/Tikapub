@@ -77,9 +77,30 @@ def generate_quote(
     help="Ne pas générer de musique d'ambiance automatiquement si --music n'est pas fourni.",
 )
 @click.option("--seed", default=None, type=int, help="Graine aléatoire (fond et musique générés).")
+@click.option(
+    "--no-whisper-align",
+    is_flag=True,
+    default=False,
+    help="Désactive l'alignement précis des sous-titres via Whisper (utilise l'estimation proportionnelle).",
+)
+@click.option(
+    "--whisper-model",
+    default="base",
+    help="Taille du modèle faster-whisper utilisé pour l'alignement des sous-titres.",
+)
 @click.option("--output", default=None, type=click.Path())
 def generate_voiceover(
-    script, script_file, topic, background_image, background_video, music, no_default_music, seed, output
+    script,
+    script_file,
+    topic,
+    background_image,
+    background_video,
+    music,
+    no_default_music,
+    seed,
+    no_whisper_align,
+    whisper_model,
+    output,
 ):
     """Génère une vidéo « résumé / voix off IA » avec sous-titres synchronisés."""
     from tikapub.generators.voiceover import VoiceoverVideoConfig, VoiceoverVideoGenerator
@@ -98,6 +119,8 @@ def generate_voiceover(
         generate_default_music=not no_default_music,
         seed=seed,
         fonts_dir=settings.fonts_dir,
+        align_subtitles=not no_whisper_align,
+        whisper_model=whisper_model,
     )
     output_path = Path(output) if output else settings.output_dir / "voiceover.mp4"
     result = VoiceoverVideoGenerator(config).generate(output_path)
